@@ -2,6 +2,9 @@
 <Workspace
    version = "1.0">
    <FileRef
+      location = "group:Combine.playground">
+   </FileRef>
+   <FileRef
       location = "group:/Users/2210130085/CocoaPlayground/RxSwift.playground">
    </FileRef>
    <FileRef
