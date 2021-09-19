@@ -400,6 +400,248 @@ sender.event = "う"
 sender.event = "え"
 sender.event = "お"
 
-
+print("// ------------------ // ")
 // Operator
+
+final class Model {
+    @Published var value: String = "0"
+}
+
+let model = Model()
+
+final class ViewModel {
+    var text: String = "" {
+        didSet {
+            print("didSet text:", text)
+        }
+    }
+}
+
+final class ReceiverJ {
+    
+    var subscriptions = Set<AnyCancellable>()
+    let viewModel = ViewModel()
+    
+    init() {
+        model.$value
+            .assign(to: \.text, on: viewModel)
+            .store(in: &subscriptions)
+    }
+}
+
+let receiverJ = ReceiverJ()
+model.value = "1"
+model.value = "2"
+model.value = "3"
+model.value = "4"
+model.value = "5"
+
+
+// Modelのvalueが変更されると,viewModelのTextに反映される
+// あるオブジェクトの変更を別のオブジェクトに結びつけることを慣用的にバインディングと呼ぶ
+// Combineを使うとバインディングの処理を簡潔にかける
+
+print("// ------------------ // ")
+
+// Map
+// バインドしたいプロパティの方が常に一致しているとは限らない
+
+// ModelのvalueがIntだった場合
+
+final class ModelA {
+    @Published var value: Int = 0
+}
+
+let modelA = ModelA()
+
+final class ViewModelA {
+    var text: String = "" {
+        didSet {
+            print("didSet text:", text)
+        }
+    }
+}
+
+final class ReceiverK {
+    var subscriptions = Set<AnyCancellable>()
+    let viewModelA = ViewModelA()
+    let formatter = NumberFormatter()
+    
+    init() {
+        formatter.numberStyle = .spellOut
+        
+        modelA.$value
+            // Int　→ String(spellOut)にformat
+            .map { value in
+                self.formatter.string(
+                    from: NSNumber(integerLiteral: value)) ?? ""
+            }
+            // assignには変更後の値が渡させる
+            .assign(to: \.text, on: viewModelA)
+            .store(in: &subscriptions)
+    }
+}
+
+let receiverK = ReceiverK()
+modelA.value = 1
+modelA.value = 2
+modelA.value = 3
+modelA.value = 11
+
+// mapはPublisherのMap
+/*
+ - func map<T>(_ transform: @escaping (Self.Output) -> T) -> Publishers.Map<Self, T>
+ - Publisher プロトコルに適合する Publishers.Map という型になっている
+ - map メソッドの戻り値は Publisher なので subscribe できる。
+ - assign を使って subscribe されている
+ 
+ */
+
+print("// ------------------ // ")
+
+// filter
+
+final class ModelB {
+    @Published var value: Int = 0
+}
+
+let modelB = ModelB()
+
+final class ViewModelB {
+    var text: String = "" {
+        didSet {
+            print("didSet text:", text)
+        }
+    }
+}
+
+final class ReceiverL {
+    var subscriptions = Set<AnyCancellable>()
+    let viewModelB = ViewModelB()
+    let formatter = NumberFormatter()
+    
+    init() {
+        
+        formatter.numberStyle = .spellOut
+        
+        // 偶数のみをpublishするように変換する
+        modelB.$value
+            .filter { $0 % 2 == 0 }
+            .map { self.formatter.string(from: NSNumber(integerLiteral: $0)) ?? "" }
+            .assign(to: \.text, on: viewModelB)
+            .store(in: &subscriptions)
+    }
+}
+
+let receiverL = ReceiverL()
+modelB.value = 1
+modelB.value = 2
+modelB.value = 3
+modelB.value = 4
+modelB.value = 5
+
+print("// ------------------ // ")
+
+// compactMap
+// nilの場合publishしない
+
+final class ModelC {
+    @Published var value: Int = 0
+}
+
+let modelC = ModelC()
+
+final class ViewModelC {
+    var text: String = "" {
+        didSet {
+            print("didSet text:", text)
+        }
+    }
+}
+
+final class ReceiverM {
+    var subscriptions = Set<AnyCancellable>()
+    let viewModelC = ViewModelC()
+    let formatter = NumberFormatter()
+    
+    init() {
+        formatter.numberStyle = .spellOut
+        
+        modelC.$value
+            .compactMap { self.formatter.string(from: NSNumber(integerLiteral: $0)) }
+            .assign(to: \.text, on: viewModelC)
+            .store(in: &subscriptions)
+    }
+}
+
+let receiverM = ReceiverM()
+modelC.value = 1
+modelC.value = 2
+modelC.value = 3
+modelC.value = 4
+modelC.value = 5
+
+// nilをpublishするだけでなく、返還後はOptionalのString?ではなくStringになる
+// これがcompactMapを使うメリット
+
+print("// ------------------ // ")
+
+// combineLatest
+// 二つのPublisherからひとつのPulisherを作るOpertor
+
+final class ModelD {
+    let subjectX = PassthroughSubject<String, Never>()
+    let subjectY = PassthroughSubject<String, Never>()
+}
+
+let modelD = ModelD()
+
+final class ViewModelD {
+    var text: String = "" {
+        didSet {
+            print("didSet text:", text)
+        }
+    }
+}
+
+final class ReceiverN {
+    var subscriptions = Set<AnyCancellable>()
+    let viewModelD = ViewModelD()
+    
+    init() {
+        modelD.subjectX
+            .combineLatest(modelD.subjectY)
+            .map { "X:" + $0.0 + " Y:" + $0.1 }
+            .assign(to: \.text, on: viewModelD)
+            .store(in: &subscriptions)
+    }
+}
+let receiverN = ReceiverN()
+modelD.subjectX.send("1")
+modelD.subjectX.send("2")
+modelD.subjectY.send("3")
+modelD.subjectY.send("4")
+modelD.subjectX.send("5")
+
+/*
+ combineLatestは、
+ 二つのPublisherのうちどちらかがpublishした場合に
+ 両方の最新の値をタプルでくみにしてpublishする、というもの
+ 
+ 片方がまだ一つもpublishしてない場合publishしない
+ 二つのプロパティが両方セットされた場合に何かしらの処理を行いたい場合使う
+
+ Operatorはまだまだある
+ 
+ そのほか
+ prepend
+ append
+ merge
+ switchToLatest
+ */
+
+
+
+
+
 
