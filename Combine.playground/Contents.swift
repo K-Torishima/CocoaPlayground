@@ -297,13 +297,109 @@ final class ReceiverF {
                 }
             }, receiveValue: { data, response in
                 print("Received data", data)
-                print("Received response", response)
+                // print("Received response", response)
             })
             .store(in: &subscrioptions)
     }
 }
 
-let receiverF = ReceiverF()
+// let receiverF = ReceiverF()
 
 print("// ------------------ // ")
+
 // Subject
+
+let subjectG = CurrentValueSubject<String, Never>("A")
+
+final class ReceiverG {
+    var subscriptions = Set<AnyCancellable>()
+    
+    init() {
+        subjectG
+            .sink { value in
+                print("Received value:", value)
+            }
+            .store(in: &subscriptions)
+    }
+}
+
+let receiverG = ReceiverG()
+subjectG.send("a")
+subjectG.send("b")
+subjectG.send("c")
+subjectG.send("d")
+subjectG.send("e")
+print("Current value:", subjectG.value)
+
+// PassthroughSubjectとCurrentValueSubjectの二つをSubjectと呼ぶ
+// sendを呼ぶとpublishする
+// send は　SubjectProtocolのmethod
+
+// CurrentValueSubjectは現在の値を持っている
+// Currentはsubscribeするとすぐに現在値がpublishされる
+
+print("// ------------------ // ")
+
+// Subjectの型消去
+
+// Subjectはsendを使える。しかしどこからでもsendができてしまうのは、場合によっては好ましくない
+//　イベントを送信するオブジェクトとイベントを受信するオブジェクトは、設計上分離することが多いため
+
+let subjectH = PassthroughSubject<String, Never>()
+//　subjectがPublisherになる
+let publisherH = subjectH.eraseToAnyPublisher()
+
+final class ReceiverH {
+    var subscriptions = Set<AnyCancellable>()
+    
+    init() {
+        publisherH
+            .sink { value in
+                print("Received value:", value)
+            }
+            .store(in: &subscriptions)
+    }
+}
+
+let receiverH = ReceiverH()
+subjectH.send("A")
+subjectH.send("B")
+subjectH.send("C")
+subjectH.send("D")
+subjectH.send("E")
+
+print("// ------------------ // ")
+
+// @Published
+
+final class Sender {
+    //プロパティラッパーをつけるだけでPublisherになる
+    @Published var event: String = "A"
+    // private をつければ外部変更できないようにできる（普通のプロパティと同じ)
+    // @Published private(set) var event: String = "A"
+}
+
+let sender = Sender()
+
+final class ReceiverI {
+    var subscriptions = Set<AnyCancellable>()
+    
+    init() {
+        sender.$event
+            .sink { value in
+                print("Received value:", value)
+            }
+            .store(in: &subscriptions)
+    }
+}
+
+let receiverI = ReceiverI()
+sender.event = "あ"
+sender.event = "い"
+sender.event = "う"
+sender.event = "え"
+sender.event = "お"
+
+
+// Operator
+
