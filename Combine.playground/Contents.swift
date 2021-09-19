@@ -640,8 +640,8 @@ modelD.subjectX.send("5")
  switchToLatest
  */
 
-
-
-
+// Combineを導入する上で一番大事なこと
+// UI（View)とModelとのBinding
+// UIKit + Combineでも十分活用可能
 
 
