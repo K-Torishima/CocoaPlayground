@@ -181,11 +181,130 @@ print("// ------------------- //")
 
 // * Publisher
 
+// イベントを送信するものをpublisher
+// publisherがイベントを送信することをpublishと呼ぶ
+// publisherをsubscribeすることでイベントを受信できる
+// passthroughSubjectはpublisherの一つである
 
+print("// ------------------ // ")
+//　Sequence
+// 配列に.publisherをつけるだけでアクセスできる
+// let publisher = ["あ", "い", "う", "え", "お"].publisher
+let publisher = (1 ... 20).publisher
 
+final class ReceiverC {
+    var subscriptions = Set<AnyCancellable>()
+    
+    init() {
+        publisher
+            .map { $0 + 1 }
+            .sink { completion in
+                print("Received completion: ", completion)
+            } receiveValue: { value in
+                print("value", value)
+            }
+            .store(in: &subscriptions)
+        
+        publisher
+            .filter { $0 % 3 == 0 }
+            .sink { completion in
+                print(completion)
+            } receiveValue: { value in
+                print("3の倍数をフィルターしてます: ", value)
+            }
+            .store(in: &subscriptions)
+    }
+}
 
+let receiverC = ReceiverC()
 
+print("// ------------------ // ")
 
+// Timer
+// 1秒ごとに現在時刻をpublishしている
+let publisherD = Timer.publish(every: 1, on: .main, in: .common)
 
+final class ReceiverD {
 
+    var subscriptions = Set<AnyCancellable>()
+    
+    init() {
+        publisherD
+            //　autoconnectをつけるとconnectする必要はない
+            // 自動的に現在時刻が表示される。
+            // .autoconnect()
+            .sink { value in
+                print("Received value:", value)
+            }
+            .store(in: &subscriptions)
+    }
+}
+
+let receiver = ReceiverD()
+//connectしないとイベントは発行されない
+// 以下をコメントアウトするとTimerは動かない
+// publisherD.connect()
+
+// 何に使うかは微妙。
+
+print("// ------------------ // ")
+
+// Notification
+// Notification CenterでもPublisherは存在する
+
+let myNotification = Notification.Name("MyNotification")
+
+let notificationPublisher = NotificationCenter.default.publisher(for: myNotification)
+
+final class ReceiverE {
+
+    var subscriptions = Set<AnyCancellable>()
+    
+    init() {
+        notificationPublisher
+            .sink { value in
+                print("Notification Received value:", value)
+            }
+            .store(in: &subscriptions)
+    }
+}
+
+let receiverE = ReceiverE()
+NotificationCenter.default.post(Notification(name: myNotification))
+
+// NotificationのPublisherは指定した通知がpostされたとき、その通知をPublishする
+// 自前の通知を指定してやれば良い
+// OSが発行する通知も指定できる
+
+// URLSession
+// Errorをpublishするため注意が必要
+// 通信が成功すれば、その結果をpublishする
+// data、responseのタプルになっている
+
+let url = URL(string: "https://example.com")!
+let sessionPublisher = URLSession.shared.dataTaskPublisher(for: url)
+
+final class ReceiverF {
+    var subscrioptions = Set<AnyCancellable>()
+    
+    init() {
+        sessionPublisher
+            .sink(receiveCompletion: { completion in
+                if case let .failure(error) = completion {
+                    print("Received error:", error)
+                } else {
+                    print("Received completion:", completion)
+                }
+            }, receiveValue: { data, response in
+                print("Received data", data)
+                print("Received response", response)
+            })
+            .store(in: &subscrioptions)
+    }
+}
+
+let receiverF = ReceiverF()
+
+print("// ------------------ // ")
+// Subject
 
