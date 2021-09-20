@@ -644,4 +644,242 @@ modelD.subjectX.send("5")
 // UI（View)とModelとのBinding
 // UIKit + Combineでも十分活用可能
 
+print("// ------------------ //")
+// データの変更を伝える
 
+final class Account {
+    private(set) var userId = ""
+    private(set) var passwoed = ""
+    private(set) var isValid = false
+    
+    func update(userId: String, password: String) {
+        self.userId = userId
+        self.passwoed = password
+        isValid = userId.count >= 4 && password.count >= 4
+    }
+}
+// Accountのupdateを呼ぶとそれに応じてisValidの値が決まる
+
+final class ReceiverO {
+    private let account = Account()
+    
+    func load() {
+        account.update(userId: "hoge", password: "pass")
+        print("ReceiverO isValid: \(account.isValid)")
+    }
+}
+
+let receiverO = ReceiverO()
+receiverO.load()
+
+// updateメソッドを読んだ後で、Receiverクラスが自分でisValidプロパティを読むことになる
+// Receiverクラスの実装を注意深く行わないと、isValidプロパティを読みにいく処理を忘れてしまいそう。
+
+// 上記の方法ではなくAccountクラスからisValidプロパティが変わったことを通知してもらう方が間違いは起こりにくい
+// Accountクラスに通知のためのpublisherを用意してReceiverクラスでsubscribeするという方法がある
+
+print("// ------------------ //")
+// ＠Published
+
+final class AccountP {
+    private(set) var userId = ""
+    private(set) var passwoed = ""
+    @Published private(set) var isValid = false
+    
+    func update(userId: String, password: String) {
+        self.userId = userId
+        self.passwoed = password
+        isValid = userId.count >= 4 && password.count >= 4
+    }
+}
+
+final class ReceiverP {
+    private var subscriptions = Set<AnyCancellable>()
+    private let account = AccountP()
+    
+    init() {
+        account.$isValid
+            .sink { isValid in
+                print("ReceiverP isValid: \(isValid)")
+            }
+            .store(in: &subscriptions)
+    }
+    
+    func load() {
+        account.update(userId: "hoge", password: "pass")
+    }
+}
+
+let receiverP = ReceiverP()
+receiverP.load()
+
+print("// ------------------ //")
+// CurrentValueSubject
+
+final class AccountQ {
+    private(set) var userId = ""
+    private(set) var password = ""
+    private let isValidSubject: CurrentValueSubject<Bool, Never>
+    let isValid: AnyPublisher<Bool, Never>
+    
+    init() {
+        isValidSubject = CurrentValueSubject<Bool, Never>(false)
+        isValid = isValidSubject.eraseToAnyPublisher()
+    }
+    
+    func update(userId: String, password: String) {
+        self.userId = userId
+        self.password = password
+        let isValid = userId.count >= 4 && password.count >= 4
+        isValidSubject.send(isValid)
+        // こっちでも良い
+        // isValidSubject.value = isValid
+    }
+}
+
+/*
+ CurrentValueSubjectはprivateにしてAccountクラスの外側には公開しないようにしている
+ sendメソッドやvalueプロパティをAccountクラスの外側から使えないようにする
+ eraseToAnyPublisherメソッドによってSubjectではないPublisherに変換して公開している
+ */
+
+final class ReceiverQ {
+    
+    private var subscriptions = Set<AnyCancellable>()
+    private let account = AccountQ()
+    
+    init() {
+        account.isValid
+            .sink { isValid in
+                print("ReceiverQ  isValid:", isValid)
+            }
+            .store(in: &subscriptions)
+    }
+    
+    func load() {
+        account.update(userId: "hoge", password: "pass")
+    }
+}
+
+let receiverQ = ReceiverQ()
+receiverQ.load()
+
+
+print("// ------------------ //")
+// PassthroughSubject（上の方法とほぼ同じ）
+
+final class AccountR {
+    private(set) var userId: String = ""
+    private(set) var password: String = ""
+    private let isValidSubject: PassthroughSubject<Bool, Never>
+    let isValid: AnyPublisher<Bool, Never>
+    
+    
+    init() {
+        isValidSubject = PassthroughSubject<Bool, Never>()
+        isValid = isValidSubject.eraseToAnyPublisher()
+    }
+
+    func update(userId: String, password: String) {
+        self.userId = userId
+        self.password = password
+        let isValid = userId.count >= 4 && password.count >= 4
+        isValidSubject.send(isValid)
+    }
+}
+
+final class ReceiverR {
+    private var subscriptions = Set<AnyCancellable>()
+    private let account = AccountR()
+    
+    init() {
+        account.isValid
+            .sink { isValid in
+                print("ReceiverR isValid:", isValid)
+            }
+            .store(in: &subscriptions)
+    }
+    
+    func load() {
+        account.update(userId: "aa", password: "aaaaa")
+    }
+}
+
+let receiverR = ReceiverR()
+receiverR.load()
+
+// どれを使うべきか
+
+/*
+ - @Published
+ - CurrentValueSubject
+ - PssthroughSubject
+ 
+ 結論、やりたいことができるならどれでも良い
+ 
+ - PssthroughSubject
+ 値を保持しないという特徴がある、
+ 初期値を考慮する必要がなく、必要な時に必要なだけイベントを通知するということがやりやすい
+ 
+ 逆にイベント以外でも通常のプロパティのように値を参照したい場合は
+ @PublishedやCurrentValueSubjectが向いている
+ 
+ - @Published
+ 通常のプロパティとほとんど同じような感覚で使うことができる
+ Codeがシンプルになるという点でCurrentValueSubjectより便利
+ @Publishedはclassでしか使えない
+ Subjectでは.finishdや.failueをsendできるが @Publishedではできない
+ 
+ 状況に応じて実装していくと良さそう
+ 
+ */
+
+print("// ------------------ //")
+// Opelaterの活用
+
+final class AccountS {
+    private let userIdSubject: CurrentValueSubject<String, Never>
+    private let passwordSubject: CurrentValueSubject<String, Never>
+    var userId: String { userIdSubject.value }
+    var password: String { passwordSubject.value }
+    
+    let isValid: AnyPublisher<Bool, Never>
+    
+    init() {
+        userIdSubject = CurrentValueSubject<String, Never>("")
+        passwordSubject = CurrentValueSubject<String, Never>("")
+        isValid = userIdSubject
+            .combineLatest(passwordSubject)
+            .map { userId, password in
+                userId.count >= 4 && password.count >= 4
+            }
+            .eraseToAnyPublisher()
+    }
+    
+    func update(userId: String, password: String) {
+        userIdSubject.value = userId
+        passwordSubject.value = password
+    }
+}
+
+final class ReceiverS {
+    private var subscription = Set<AnyCancellable>()
+    private let account = AccountS()
+    
+    init() {
+        account.isValid
+            .sink { isValid in
+                print("ReceiverS isValid: ", isValid)
+            }
+            .store(in: &subscription)
+    }
+    
+    func load() {
+        account.update(userId: "hoge", password: "hugahuga")
+        print(account.password)
+        print(account.userId)
+    }
+}
+
+let receiverS = ReceiverS()
+receiverS.load()
