@@ -883,3 +883,228 @@ final class ReceiverS {
 
 let receiverS = ReceiverS()
 receiverS.load()
+
+
+print("// -------------- //")
+
+final class AccountT {
+    private(set) var userId = ""
+    private(set) var password = ""
+    @Published private(set) var isValid = false
+    
+    func update(userId: String, password: String) {
+        self.userId = userId
+        self.password = password
+        isValid = userId.count >= 4 && password.count >= 4
+    }
+}
+
+final class SomeObjectT {
+    var value: Bool = false {
+        didSet {
+            print("isValid: \(value)")
+        }
+    }
+}
+
+final class ReceiverT {
+    private var subscriptions = Set<AnyCancellable>()
+    private let object = SomeObjectT()
+    private let account = AccountT()
+    
+    init() {
+        account.$isValid
+            .assign(to: \.value, on: object)
+            .store(in: &subscriptions)
+    }
+    
+    func load() {
+        account.update(userId: "hoge", password: "huga")
+    }
+}
+
+let receiverT = ReceiverT()
+receiverT.load()
+
+
+// UIの更新
+
+import PlaygroundSupport
+import UIKit
+
+// --------------------------- //
+
+let view = UIView()
+view.frame = CGRect(x: 0, y: 0, width: 320, height: 160)
+view.backgroundColor = .white
+PlaygroundPage.current.liveView = view
+
+let label = UILabel()
+label.frame = CGRect(x: 20, y: 20, width: 280, height: 20)
+label.textColor = .black
+label.text = "initial text"
+view.addSubview(label)
+
+final class ReceiverUI {
+    private var subscriptions = Set<AnyCancellable>()
+    private var account = AccountT()
+    
+    init() {
+        account.$isValid
+            // publishされる値を表示する値に変換する
+            .map { "isValid: \($0)"}
+            // 表示用の値を実際にUIに反映する
+            .assign(to: \.text, on: label)
+            .store(in: &subscriptions)
+    }
+    
+    func load() {
+        account.update(userId: "hoge", password: "pass")
+    }
+}
+
+// let receiverUI = ReceiverUI()
+// receiverUI.load()
+
+// 上記には二つのことがあるので別クラスに分離する
+
+final class ViewModelE {
+    // publishされる値を表示する値に変換する
+    
+    //　表示用のテキストをPublishする
+    let labelText: AnyPublisher<String?, Never>
+    private let account = AccountT()
+    
+    init() {
+        labelText = account.$isValid
+            .map { "isValid: \($0)" }
+            .eraseToAnyPublisher()
+    }
+    
+    func load() {
+        account.update(userId: "hoge", password: "pass")
+    }
+}
+
+final class ViewController {
+    // 表示用の値を実際にUIに反映する
+    
+    private var subscriptions = Set<AnyCancellable>()
+    private let viewModel = ViewModelE()
+    
+    init() {
+        // viewModel -> view
+        viewModel.labelText
+            .assign(to: \.text, on: label)
+            .store(in: &subscriptions)
+    }
+    
+    func load() {
+        // view -> viewModel
+        self.viewModel.load()
+        
+    }
+}
+
+let viewController = ViewController()
+viewController.load()
+
+//　全てのバインディングはassignでは書けない
+// sinkが必要
+
+// 例
+
+struct Article {
+    var id: String
+    var title: String
+    var content: String
+}
+
+final class ViewModelF {
+    // datasource
+    @Published private(set) var articles: [Article] = []
+    
+    func fetch() {
+        //　仮データ(実際にはURLSessionなどでデータを取得する
+        let fetchedArticles = (0 ..< 10).map {
+            Article(id: "id \($0)",
+                    title: "title \($0)",
+                    content: "content \($0)")
+        }
+        
+        // APIからデータを取得後　articlesに格納
+        articles = fetchedArticles
+    }
+}
+
+final class ViewControllerF {
+    private var subscriptions = Set<AnyCancellable>()
+    private let viewModel = ViewModelF()
+    
+    init() {
+        viewModel.$articles
+            .sink { values in
+                // viewのdata配列に入れるでも良いし、tableViewとかにそのまま私でも良いと思う
+                print(values)
+            }
+            .store(in: &subscriptions)
+    }
+    
+    func fetch() {
+        viewModel.fetch()
+    }
+}
+
+let viewControllerF = ViewControllerF()
+viewControllerF.fetch()
+
+// UIKitでの活用
+// UIKitにはCombine向けのインターフェースがない
+// UIControllにはPublisherがない
+
+// 標準で提供されているもの
+// Notification
+// 以下はkeyboardの通知
+final class ViewControllerG: UIViewController {
+    private var subscriptions = Set<AnyCancellable>()
+    
+    override func viewDidLoad() {
+        super.viewDidLoad()
+        NotificationCenter.default
+            .publisher(for: UIResponder.keyboardDidShowNotification)
+            .sink { notification in
+                print(notification)
+            }
+            .store(in: &subscriptions)
+    }
+}
+
+// PassthroughSubjectの活用
+// イベント発生はtarget_Action方式
+// Action発生時イベントをpublishしてくれるPublisherがいればそれをsubscribeすることでActionを処理できる
+
+// Actionハンドラが呼ばれたとき、PassthroughSubjectのsendを使ってイベントを中継するという方法がある
+// 以下はサンプルであるためplaygroundでは動かない
+
+final class SimpleButtonViewController: UIViewController {
+    private var subscriptions = Set<AnyCancellable>()
+    private let buttonTap = PassthroughSubject<Void, Never>()
+    
+    @IBOutlet private var button: UIButton!
+    
+    override func viewDidLoad() {
+        super.viewDidLoad()
+        button.addTarget(self, action: #selector(buttonTapAction), for: .touchUpInside)
+        buttonTap
+            .sink { _ in
+                print("Button Tap")
+            }
+            .store(in: &subscriptions)
+    }
+    
+    @objc func buttonTapAction() {
+        buttonTap.send()
+    }
+}
+
+
